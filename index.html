@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>QQQ Interactive Chart</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light;--bg:#fff;--fg:#1a1a1a;--mute:#6b7280;--grid:#e5e7eb;--line:#2563eb;--tl:#dc2626;--card:#f3f4f6;--bd:#d1d5db;--up:#15803d;--dn:#b91c1c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#111318;--fg:#e5e7eb;--mute:#9ca3af;--grid:#262a33;--line:#60a5fa;--tl:#f87171;--card:#1b1f27;--bd:#374151;--up:#4ade80;--dn:#f87171}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#111318;--fg:#e5e7eb;--mute:#9ca3af;--grid:#262a33;--line:#60a5fa;--tl:#f87171;--card:#1b1f27;--bd:#374151;--up:#4ade80;--dn:#f87171}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:12px}
+h1{font-size:18px;margin:0 0 2px}
+#note{color:var(--mute);font-size:12px;margin-bottom:8px}
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+button,.file{background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:5px 10px;font:inherit;cursor:pointer}
+button.on{background:var(--line);color:#fff;border-color:var(--line)}
+.sp{flex:1}.bar select,.bar input[type=date]{background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:4px 6px;font:inherit}
+#wrap{position:relative;width:100%;height:min(62vh,520px);min-height:280px}
+canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+canvas.draw{cursor:crosshair;touch-action:none}
+#tip{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 10px;font-size:13px;display:none;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+#tip b{display:block}
+.up{color:var(--up)}.dn{color:var(--dn)}
+details{margin-top:10px}
+textarea{width:100%;height:80px;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:6px;font:12px monospace}
+input[type=file]{display:none}
+#puts{margin-top:10px;background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:10px 12px}
+#puts input{background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:4px 6px;font:inherit;width:110px}
+#puts label{margin-right:10px;white-space:nowrap}
+#str{margin:6px 0;color:var(--mute)}#grid table{border-collapse:collapse;font-size:12px}#grid th,#grid td{padding:3px 8px;border:1px solid var(--bd);text-align:center}#grid td{cursor:pointer}#pout{margin-top:8px;line-height:1.6}.fine{color:var(--mute);font-size:12px;margin-top:6px}
+</style></head><body>
+<h1>QQQ</h1>
+<div id="note"></div>
+<div id="fitinfo" style="font-size:12px;color:var(--mute);margin-bottom:6px"></div>
+<div class="bar">
+  <button id="mHover" class="on">Hover</button>
+  <button id="mDraw">Draw trend line</button><button id="mFit" title="Click two dates, or drag across a date range, to draw the straight line of best fit through the closing prices between them">Best fit</button>
+  <button id="undo">Undo</button>
+  <button id="clear">Clear lines</button><button id="mir" title="Duplicate the selected line (click a line in Hover mode to select it; defaults to the latest) and flip it vertically around its start point">Mirror line</button>
+  <button id="pl">◀</button><button id="pr">▶</button><button id="zo">−</button><button id="zi">+</button><button id="fit">Fit</button><label><input type="checkbox" id="ext" checked> Extend lines right</label>
+  <select id="iv" title="Price interval"><option value="1d">Daily</option><option value="1h">1 hour</option><option value="5m">5 min</option><option value="1m">1 min</option></select>
+  <label>From <input type="date" id="rf"></label><label>To <input type="date" id="rt"></label>
+  <label>MA days <input id="ma" type="number" min="2" step="1" value="20" style="width:64px;background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:4px 6px;font:inherit"></label><span class="sp"></span>
+  <span id="rng"></span>
+</div>
+<div id="wrap"><canvas id="c"></canvas><div id="tip"></div></div>
+<div id="puts"><b>Put scenario</b> <span style="color:var(--mute)">(uses the selected line, or the most recent)</span>
+  <div id="str"></div>
+  <label>Strike <input id="ps" type="number" step="1" placeholder="e.g. 730"></label>
+  <label>Premium / share <input id="pp" type="number" step="0.01" placeholder="e.g. 9.50"></label>
+  <label>Expiry <input id="pe" type="date"></label>
+  <label>Zone ±% <input id="pz" type="number" step="0.25" value="1" style="width:70px"></label>
+  <div style="margin-top:6px"><span style="color:var(--mute)">Optional put spread (sell a lower strike):</span>
+  <label>Short strike <input id="pk" type="number" step="1"></label>
+  <label>Premium received <input id="pq" type="number" step="0.01"></label></div>
+  <div id="pout"></div>
+  <div id="grid"></div>
+  <div class="fine">Scenario math only: it assumes your trend line is right and values the put at expiry. It does not model implied volatility or time decay before expiry. Not financial advice.</div>
+</div>
+<details><summary>Load real QQQ data (CSV)</summary>
+  <p style="color:var(--mute);font-size:12px;margin:6px 0">Download QQQ history as CSV from Yahoo Finance (Historical Data → Download), then choose the file or paste it below. Needs Date and Close columns.</p>
+  <label class="file">Choose CSV<input id="f" type="file" accept=".csv,text/csv,text/plain"></label>
+  <textarea id="ta" placeholder="Date,Open,High,Low,Close,Adj Close,Volume"></textarea>
+  <button id="load" style="margin-top:6px">Load pasted CSV</button>
+</details>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$('c'),ctx=cv.getContext('2d'),tip=$('tip');
+let data=[],v0=0,v1=0,lines=[],mode='hover',drag=null,hov=null,W=0,H=0,lo=0,hi=1,rangeN='1Y',pn=null,manY=false,ext=true,tl=null,sel=-1,pdl=-1,fs=null,ff=null,iv='1d',all=[],INTRA=false,BPD=1,STEP=60,ixc={};
+const M={l:58,r:14,t:10,b:26};
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt=n=>n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+function demo(){ // simulated placeholder so the page works before real data is loaded
+  let s=12345;const r=()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+  const out=[];let p=300,d=new Date(Date.UTC(2021,9,18));
+  while(out.length<1300){d.setUTCDate(d.getUTCDate()+1);const w=d.getUTCDay();if(w==0||w==6)continue;
+    p*=1+0.0006+0.014*(r()+r()-1);out.push({d:d.toISOString().slice(0,10),p:+p.toFixed(2)});}
+  return out;
+}
+function setData(rows,demoFlag){
+  data=rows;lines=[];
+  $('note').textContent=demoFlag?'DEMO DATA (simulated, not real QQQ prices). Open "Load real QQQ data" below to use a Yahoo Finance CSV.':
+    'Loaded '+rows.length+' daily closes: '+rows[0].d+' to '+rows[rows.length-1].d;
+  setRange(rangeN);
+}
+function setRange(k){
+  rangeN=k;const n={'1M':21,'3M':63,'6M':126,'1Y':252,'5Y':1260,'MAX':1e9}[k];
+  const e=data.length-1,sp=Math.min(n,e+1);v0=e-sp+1;v1=e+Math.round(sp*.3);manY=false;
+  document.querySelectorAll('#rng button').forEach(b=>b.classList.toggle('on',b.textContent==k));
+  draw();
+}
+['1M','3M','6M','1Y','5Y','MAX'].forEach(k=>{const b=document.createElement('button');b.textContent=k;b.onclick=()=>setRange(k);$('rng').appendChild(b)});
+
+function parseCSV(t){
+  const L=t.trim().split(/\r?\n/);if(L.length<3)throw 0;
+  const h=L[0].split(',').map(s=>s.trim().replace(/"/g,'').toLowerCase());
+  const di=h.indexOf('date');let ci=h.indexOf('close');if(ci<0)ci=h.indexOf('adj close');
+  if(di<0||ci<0)throw 0;
+  const rows=[];
+  for(let i=1;i<L.length;i++){
+    const c=L[i].split(',').map(s=>s.trim().replace(/"/g,''));const p=parseFloat(c[ci]);if(!isFinite(p))continue;
+    let d=c[di];if(!/^\d{4}-\d\d-\d\d/.test(d)){const x=new Date(d);if(isNaN(x))continue;d=x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')}
+    rows.push({d:d.slice(0,10),p});
+  }
+  if(rows.length<2)throw 0;
+  return rows.sort((a,b)=>a.d<b.d?-1:1);
+}
+function tryLoad(t){try{rangeN=rangeN;setData(parseCSV(t),false)}catch(e){alert('Could not read that CSV. It needs a header row with Date and Close columns.')}}
+$('f').onchange=e=>{const f=e.target.files[0];if(f)f.text().then(tryLoad)};
+$('load').onclick=()=>tryLoad($('ta').value);
+
+const X=i=>M.l+(i-v0)/(v1-v0)*(W-M.l-M.r), IX=x=>v0+(x-M.l)/(W-M.l-M.r)*(v1-v0);
+const Y=p=>M.t+(1-(p-lo)/(hi-lo))*(H-M.t-M.b), IY=y=>lo+(1-(y-M.t)/(H-M.t-M.b))*(hi-lo);
+
+function resize(){const r=cv.getBoundingClientRect(),dpr=devicePixelRatio||1;W=r.width;H=r.height;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);draw()}
+addEventListener('resize',resize);
+
+function draw(){
+  if(!data.length||!W)return;
+  let mn=1e12,mx=-1e12;{const a=Math.max(0,Math.ceil(v0)),b=Math.min(data.length-1,Math.floor(v1));for(let i=a;i<=b;i++){mn=Math.min(mn,data[i].p);mx=Math.max(mx,data[i].p)}}if(mn>mx){mn=data[data.length-1].p*.95;mx=mn*1.1}
+  if(!manY){const pad=(mx-mn)*.06||1;lo=mn-pad;hi=mx+pad}
+  ctx.clearRect(0,0,W,H);ctx.font='11px system-ui,sans-serif';
+  const grid=css('--grid'),mute=css('--mute');
+  ctx.strokeStyle=grid;ctx.fillStyle=mute;ctx.lineWidth=1;ctx.textAlign='right';ctx.textBaseline='middle';
+  for(let k=0;k<=5;k++){const p=lo+(hi-lo)*k/5,y=Y(p);ctx.beginPath();ctx.moveTo(M.l,y);ctx.lineTo(W-M.r,y);ctx.stroke();ctx.fillText(fmt(p),M.l-6,y)}
+  ctx.textAlign='center';ctx.textBaseline='top';
+  for(let k=0;k<=5;k++){const i=Math.round(v0+(v1-v0)*k/5);ctx.fillText(dateAt(i),Math.min(Math.max(X(i),M.l+30),W-M.r-30),H-M.b+8)}
+  ctx.save();ctx.beginPath();ctx.rect(M.l,M.t,W-M.l-M.r,H-M.t-M.b);ctx.clip();
+  const last=data[data.length-1].p;
+  ctx.setLineDash([4,4]);ctx.strokeStyle=mute;ctx.beginPath();ctx.moveTo(M.l,Y(last));ctx.lineTo(W-M.r,Y(last));ctx.stroke();ctx.setLineDash([]);
+  ctx.strokeStyle=css('--line');ctx.lineWidth=1.8;ctx.beginPath();
+  for(let i=Math.max(0,Math.ceil(v0)-1),e=Math.min(data.length-1,Math.floor(v1)+1),f=i;i<=e;i++){const x=X(i),y=Y(data[i].p);i==f?ctx.moveTo(x,y):ctx.lineTo(x,y)}ctx.stroke();
+  ctx.strokeStyle=css('--tl');ctx.lineWidth=2;
+  maLine();fitBox();lvls();const segs=drag?lines.concat([drag]):lines;
+  for(const s0 of segs){const s=ord(s0);ctx.lineWidth=s0===lines[sel]?3.5:2;ctx.setLineDash(s0.m?[6,4]:[]);if(s0===tgt())band(s);let e=s.b;if(ext&&s.b.i!==s.a.i){const ie=IX(W),sl=(s.b.p-s.a.p)/(s.b.i-s.a.i);if(ie>s.b.i)e={i:ie,p:s.b.p+sl*(ie-s.b.i)}}ctx.beginPath();ctx.moveTo(X(s.a.i),Y(s.a.p));ctx.lineTo(X(e.i),Y(e.p));ctx.stroke();mwf(s);ctx.setLineDash([]);
+    for(const q of [s.a,s.b]){ctx.beginPath();ctx.arc(X(q.i),Y(q.p),3,0,7);ctx.fillStyle=css('--tl');ctx.fill()}}
+  if(tl&&!drag){ctx.beginPath();ctx.arc(X(tl.i),Y(tl.p),5,0,7);ctx.fillStyle=css('--tl');ctx.fill()}if(hov!=null&&!drag){const x=X(hov),y=Y(data[hov].p);ctx.strokeStyle=mute;ctx.lineWidth=1;ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(x,M.t);ctx.lineTo(x,H-M.b);ctx.stroke();ctx.setLineDash([]);
+    ctx.beginPath();ctx.arc(x,y,5,0,7);ctx.fillStyle=css('--line');ctx.fill();ctx.strokeStyle=css('--bg');ctx.lineWidth=2;ctx.stroke()}
+  ctx.restore();
+}
+function pos(e){const r=cv.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+function showTip(x,y){
+  if(hov==null||drag){tip.style.display='none';return}
+  const p=data[hov].p,last=data[data.length-1].p,ch=(last-p)/p*100;
+  tip.innerHTML='<b>'+data[hov].d+'</b>Price: $'+fmt(p)+'<br>Change to latest ($'+fmt(last)+'): <span class="'+(ch>=0?'up':'dn')+'">'+(ch>=0?'+':'')+ch.toFixed(2)+'%</span>';
+  tip.style.display='block';
+  const w=tip.offsetWidth,h=tip.offsetHeight;
+  tip.style.left=Math.max(0,Math.min(x+14>W-w?x-w-14:x+14,W-w))+'px';
+  tip.style.top=Math.max(0,Math.min(y-h-10<0?y+14:y-h-10,H-h))+'px';
+}
+cv.addEventListener('pointermove-old',e=>{
+  const{x,y}=pos(e);
+  if(x<M.l||x>W-M.r){hov=null}else hov=Math.max(v0,Math.min(v1,Math.round(IX(x))));
+  if(drag){drag.b={i:IX(Math.max(M.l,Math.min(W-M.r,x))),p:IY(y)}}
+  draw();showTip(x,y);
+});
+cv.addEventListener('pointerleave',()=>{hov=null;tip.style.display='none';draw()});
+cv.addEventListener('pointerdown-old',e=>{
+  if(mode!='draw')return;const{x,y}=pos(e);if(x<M.l||x>W-M.r)return;
+  cv.setPointerCapture(e.pointerId);const q={i:IX(x),p:IY(y)};drag={a:q,b:q};
+});
+cv.addEventListener('pointerup-old',e=>{
+  if(!drag)return;const s=drag;drag=null;
+  if(Math.hypot(X(s.a.i)-X(s.b.i),Y(s.a.p)-Y(s.b.p))>6)lines.push(s);
+  draw();
+});
+function setMode(m){mode=m;$('mHover').classList.toggle('on',m=='hover');$('mDraw').classList.toggle('on',m=='draw');cv.classList.toggle('draw',m=='draw')}
+$('mHover').onclick=()=>setMode('hover');$('mDraw').onclick=()=>setMode('draw');
+$('undo').onclick=()=>{lines.pop();draw()};$('clear').onclick=()=>{lines=[];sel=-1;draw()};
+addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key=='z'){lines.pop();draw()}});
+
+function ord(s){return s.a.i<=s.b.i?s:{a:s.b,b:s.a}}
+function dateAt(i){i=Math.max(0,Math.round(i));const n=data.length-1;if(i<=n)return data[i].d;const d=new Date(data[n].d+'T00:00:00Z');let k=i-n;while(k>0){d.setUTCDate(d.getUTCDate()+1);const w=d.getUTCDay();if(w&&w!=6)k--}return d.toISOString().slice(0,10)}
+function clampV(){const n=data.length-1,sp=Math.max(15,Math.min(v1-v0,n+800));if(v0<0)v0=0;v1=v0+sp;if(v1>n+800){v1=n+800;v0=v1-sp}}
+function pan(db){v0+=db;v1+=db;clampV()}
+function zoom(f,cx){const a=IX(cx);v0=a-(a-v0)*f;v1=a+(v1-a)*f;clampV()}
+const mid=()=>(M.l+W-M.r)/2;
+function sp(c){return '<span class="'+(c>=0?'up':'dn')+'">'+(c>=0?'+':'')+c.toFixed(2)+'%</span>'}
+function showTip(x,y){
+  let h;const last=data[data.length-1].p;
+  if(tl){h='<b>Trend line · '+dateAt(tl.i)+(tl.i>data.length-1?' (projected)':'')+'</b>Price: $'+fmt(tl.p)+'<br>Change to latest ($'+fmt(last)+'): '+sp((last-tl.p)/tl.p*100)}
+  else if(hov!=null){const p=data[hov].p;h='<b>'+data[hov].d+'</b>Price: $'+fmt(p)+'<br>Change to latest ($'+fmt(last)+'): '+sp((last-p)/p*100)}
+  if(!h||pn||drag){tip.style.display='none';return}
+  tip.innerHTML=h;tip.style.display='block';
+  const w=tip.offsetWidth,hh=tip.offsetHeight;
+  tip.style.left=Math.max(0,Math.min(x+14>W-w?x-w-14:x+14,W-w))+'px';
+  tip.style.top=Math.max(0,Math.min(y-hh-10<0?y+14:y-hh-10,H-hh))+'px';
+}
+cv.addEventListener('pointerdown',e=>{
+  const{x,y}=pos(e);if(x<M.l||x>W-M.r)return;cv.setPointerCapture(e.pointerId);
+  if(mode=='draw'&&!e.shiftKey){const q={i:IX(x),p:IY(y)};drag={a:q,b:q}}
+  else{pn={x,y,v0,v1,lo,hi};cv.style.cursor='grabbing'}
+});
+cv.addEventListener('pointermove',e=>{
+  const{x,y}=pos(e);
+  if(pn){const db=(x-pn.x)/(W-M.l-M.r)*(pn.v1-pn.v0);v0=pn.v0-db;v1=pn.v1-db;clampV();
+    if(manY||Math.abs(y-pn.y)>4){manY=true;const dp=(y-pn.y)/(H-M.t-M.b)*(pn.hi-pn.lo);lo=pn.lo+dp;hi=pn.hi+dp}
+    hov=null;tl=null;draw();tip.style.display='none';return}
+  if(drag)drag.b={i:IX(Math.max(M.l,Math.min(W-M.r,x))),p:IY(y)};
+  hov=null;tl=null;
+  if(x>=M.l&&x<=W-M.r){const i=IX(x);if(i>=0&&i<=data.length-1)hov=Math.round(i);
+    if(!drag){let best=10;for(const s0 of lines){const s=ord(s0);if(i<s.a.i||(!ext&&i>s.b.i))continue;const sl=(s.b.p-s.a.p)/((s.b.i-s.a.i)||1e-9),p=s.a.p+sl*(i-s.a.i),d=Math.abs(Y(p)-y);if(d<best){best=d;tl={i,p,li:lines.indexOf(s0)}}}}}
+  if(tl)hov=null;
+  draw();showTip(x,y);
+});
+cv.addEventListener('pointerup',e=>{if(pn&&Math.hypot(pos(e).x-pn.x,pos(e).y-pn.y)<4)sel=pdl;
+  if(drag){const s=drag;drag=null;if(Math.hypot(X(s.a.i)-X(s.b.i),Y(s.a.p)-Y(s.b.p))>6)lines.push(s)}
+  pn=null;cv.style.cursor='';draw();
+});
+cv.addEventListener('pointerleave',()=>{tl=null;draw()});
+cv.addEventListener('wheel',e=>{e.preventDefault();
+  if(e.shiftKey||Math.abs(e.deltaX)>Math.abs(e.deltaY))pan((e.deltaX||e.deltaY)/(W-M.l-M.r)*(v1-v0));
+  else zoom(e.deltaY>0?1.12:1/1.12,pos(e).x);
+  draw()},{passive:false});
+$('pl').onclick=()=>{pan(-(v1-v0)*.25);draw()};$('pr').onclick=()=>{pan((v1-v0)*.25);draw()};
+$('zo').onclick=()=>{zoom(1.3,mid());draw()};$('zi').onclick=()=>{zoom(1/1.3,mid());draw()};
+$('fit').onclick=()=>setRange(rangeN);
+$('ext').onchange=e=>{ext=e.target.checked;draw()};
+addEventListener('keydown',e=>{if(e.key=='ArrowLeft'){pan(-(v1-v0)*.1);draw()}if(e.key=='ArrowRight'){pan((v1-v0)*.1);draw()}});
+const fcache=[];
+function dateAt(i){i=Math.max(0,Math.round(i));const n=data.length-1;if(i<=n)return data[i].d;
+  if(fcache.src!==data[n].d){fcache.length=0;fcache.src=data[n].d;fcache.d=new Date(data[n].d+'T00:00:00Z')}
+  while(fcache.length<i-n){do{fcache.d.setUTCDate(fcache.d.getUTCDate()+1)}while(fcache.d.getUTCDay()%6==0);fcache.push(fcache.d.toISOString().slice(0,10))}
+  return fcache[i-n-1]}
+function mwf(s){
+  const sl=(s.b.p-s.a.p)/((s.b.i-s.a.i)||1e-9);
+  const a=Math.max(Math.ceil(s.a.i),Math.ceil(v0)),z=Math.min(ext?Math.floor(v1):Math.floor(s.b.i),Math.floor(v1));
+  ctx.save();ctx.fillStyle=css('--tl');ctx.font='10px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';
+  let lx=-1e9;
+  for(let i=a;i<=z;i++){const ds=dateAt(i),dy=ds.slice(0,10),w=new Date(dy+'T00:00:00Z').getUTCDay();if(w!=1&&w!=3&&w!=5)continue;if(INTRA&&i>0&&dateAt(i-1).slice(0,10)===dy)continue;
+    const p=s.a.p+sl*(i-s.a.i),x=X(i),y=Y(p);ctx.beginPath();ctx.arc(x,y,2.5,0,7);ctx.fill();
+    if(x-lx>=40){ctx.fillText('$'+fmt(p),x,y-6);lx=x}}
+  ctx.restore()}
+const RAW=`0102 613.12
+0105 617.99
+0106 623.42
+0107 624.02
+0108 620.47
+0109 626.65
+0112 627.17
+0113 626.24
+0114 619.55
+0115 621.78
+0116 621.26
+0120 608.06
+0121 616.28
+0122 620.76
+0123 622.72
+0126 625.46
+0127 631.13
+0128 633.22
+0129 629.43
+0130 621.87
+0202 626.14
+0203 616.52
+0204 605.75
+0205 597.03
+0206 609.65
+0209 614.32
+0210 611.47
+0211 613.11
+0212 600.64
+0213 601.92
+0217 601.30
+0218 605.79
+0219 603.47
+0220 608.81
+0223 601.41
+0224 607.87
+0225 616.68
+0226 609.24
+0227 607.29
+0302 608.09
+0303 601.58
+0304 610.75
+0305 608.91
+0306 599.75
+0309 607.76
+0310 607.77
+0311 607.69
+0312 597.26
+0313 593.72
+0316 600.38
+0317 603.31
+0318 594.90
+0319 593.02
+0320 582.06
+0323 588.00
+0324 583.98
+0325 587.82
+0326 573.79
+0327 562.58
+0330 558.28
+0331 577.18
+0401 584.31
+0402 584.98
+0406 588.50
+0407 588.59
+0408 606.09
+0409 610.19
+0410 611.07
+0413 617.39
+0414 628.60
+0415 637.40
+0416 640.47
+0417 648.85
+0420 646.79
+0421 644.33
+0422 655.11
+0423 651.42
+0424 663.88
+0427 664.23
+0428 657.55
+0429 661.57
+0430 667.74
+0501 674.15
+0504 672.88
+0505 681.61
+0506 695.77
+0507 694.94
+0508 711.23
+0511 713.29
+0512 707.24
+0513 714.71
+0514 719.79
+0515 708.93
+0518 705.88
+0519 701.53
+0520 713.15
+0521 714.51
+0522 717.54
+0526 730.28
+0527 729.45
+0528 735.60
+0529 738.31
+0601 742.74
+0602 746.16
+0603 744.21
+0604 740.61
+0605 705.06
+0608 716.07
+0609 707.83
+0610 693.69
+0611 717.12
+0612 721.34
+0615 744.00
+0616 729.86
+0617 722.51
+0618 740.62
+0622 737.95
+0623 713.65
+0624 710.62
+0625 716.38
+0626 706.52
+0629 724.08
+0630 736.40
+0701 725.17
+0702 712.60
+0706 722.82
+0707 709.43
+0708 711.44
+0709 723.28
+0710 725.51
+0713 711.74
+0714 719.69
+0715 717.74
+0716 705.94
+0717 695.33
+0720 696.06
+0721 708.97
+0722 705.35
+0723 691.96
+0724 684.23
+0727 682.12
+0728 675.49
+0729 661.73
+0730 683.55
+0731 687.99
+0803 700.07
+0804 723.85
+0805 717.30
+0806 714.65
+0807 723.03
+0810 720.87
+0811 718.45
+0812 723.70
+0813 732.07
+0814 731.07
+0817 729.87
+0818 717.51
+0819 716.08
+0820 710.93
+0821 713.44
+0824 706.32
+0825 710.72
+0826 711.37
+0827 721.11
+0828 716.43
+0831 716.76
+0901 707.64
+0902 709.24
+0903 717.67
+0904 718.96
+0908 718.36
+0909 716.31
+0910 708.69
+0911 714.88
+0914 709.18
+0915 704.54
+0916 704.72
+0917 716.92
+0918 721.45
+0921 741.47
+0922 747.46
+0923 741.21
+0924 741.10
+0925 744.50
+0928 736.53
+0929 737.93
+0930 739.77
+1001 742.03
+1002 749.58
+1005 756.20
+1006 759.66
+1007 757.73
+1008 747.58
+1009 751.27
+1012 746.04
+1013 743.57
+1014 728.95
+1015 728.00
+1016 709.80
+1019 718.36
+1020 717.63
+1021 725.20
+1022 704.47
+1023 704.40
+1026 712.20
+1027 721.32`;
+setData(RAW.trim().split('\n').map(l=>{const[a,b]=l.split(' ');return{d:'2026-'+a.slice(0,2)+'-'+a.slice(2),p:+b}}),false);resize();
+const pc=x=>(x>=0?'+':'')+(x*100).toFixed(1)+'%',money=x=>(x>=0?'+':'−')+'$'+fmt(Math.abs(x));
+function idxOf(ds){const n=data.length-1;if(ds<=data[n].d){let i=n;while(i>0&&data[i].d>ds)i--;return i}
+  let k=0;const d=new Date(data[n].d+'T00:00:00Z'),e=new Date(ds+'T00:00:00Z');while(d<e){d.setUTCDate(d.getUTCDate()+1);if(d.getUTCDay()%6)k++}return n+k}
+function report(){
+  const n=data.length-1,c=data.map(d=>d.p),last=c[n];
+  const sma=k=>c.slice(-k).reduce((a,b)=>a+b,0)/k;
+  let g=0,l=0;for(let i=1;i<=14;i++){const d=c[i]-c[i-1];d>0?g+=d:l-=d}g/=14;l/=14;
+  for(let i=15;i<=n;i++){const d=c[i]-c[i-1];g=(g*13+(d>0?d:0))/14;l=(l*13+(d<0?-d:0))/14}
+  const rsi=l==0?100:100-100/(1+g/l);
+  let h='Latest close $'+fmt(last)+' · RSI(14) '+rsi.toFixed(0)+' · '+pc(last/sma(20)-1)+' vs 20-day avg · '+pc(last/sma(50)-1)+' vs 50-day avg';
+  const L=lines.length?ord(lines[sel>=0&&lines[sel]?sel:lines.length-1]):null;
+  let sl=0,at=null;
+  if(L){sl=(L.b.p-L.a.p)/((L.b.i-L.a.i)||1e-9);at=i=>L.a.p+sl*(i-L.a.i);h+=' · '+pc(last/at(n)-1)+' vs your trend line today'}
+  $('str').innerHTML=INTRA?h.replace('20-day','20-bar').replace('50-day','50-bar'):h;
+  const K=+$('ps').value,P=+$('pp').value,E=$('pe').value;let o='';
+  if(!L)o='Draw a trend line to run the scenario.';
+  else if(!(K>0&&P>0&&E))o='Enter strike, premium per share and expiry.';
+  else{
+    const ie=idxOf(E),pe=at(ie),be=K-P,val=Math.max(K-pe,0),pl=(val-P)*100;let cross;
+    if(at(n)<=be)cross='Your line is already below breakeven today.';
+    else if(sl>=0)cross='Your line slopes up, so it never reaches breakeven.';
+    else{const ic=L.a.i+(be-L.a.p)/sl;cross='Your line reaches breakeven around '+dateAt(Math.ceil(ic))+(ic<=ie?' (before expiry).':' (after expiry, too late).')}
+    o='Trend line at expiry ('+E+'): <b>$'+fmt(pe)+'</b> ('+pc(pe/last-1)+' vs latest)<br>Breakeven at expiry: <b>$'+fmt(be)+'</b> ('+pc(be/last-1)+' from latest)<br>If your line is right, the put is worth $'+fmt(val)+'/share: <b class="'+(pl>=0?'up':'dn')+'">'+money(pl)+' per contract</b> ('+pc((val-P)/P)+' on premium). Max loss: $'+fmt(P*100)+' per contract.<br>'+cross+spread(K,P,pe);
+  }
+  if($('pout').innerHTML!==o)$('pout').innerHTML=o;grid();
+}
+setInterval(report,300);report();
+function tgt(){return lines[sel>=0&&lines[sel]?sel:lines.length-1]}
+function band(s){const z=(+$('pz').value||0)/100;if(!(z>0))return;
+  let e=s.b;if(ext&&s.b.i!==s.a.i){const ie=IX(W),sl=(s.b.p-s.a.p)/(s.b.i-s.a.i);if(ie>s.b.i)e={i:ie,p:s.b.p+sl*(ie-s.b.i)}}
+  ctx.save();ctx.globalAlpha=.14;ctx.fillStyle=css('--tl');ctx.beginPath();
+  ctx.moveTo(X(s.a.i),Y(s.a.p*(1-z)));ctx.lineTo(X(e.i),Y(e.p*(1-z)));ctx.lineTo(X(e.i),Y(e.p*(1+z)));ctx.lineTo(X(s.a.i),Y(s.a.p*(1+z)));ctx.closePath();ctx.fill();ctx.restore()}
+function lvls(){const K=+$('ps').value,P=+$('pp').value,K2=+$('pk').value,Q=+$('pq').value;if(!(K>0))return;
+  const net=(K2>0&&Q>0&&Q<P)?P-Q:P;
+  ctx.save();ctx.font='10px system-ui,sans-serif';ctx.textAlign='right';ctx.textBaseline='bottom';ctx.setLineDash([2,4]);ctx.lineWidth=1.2;
+  const T=(p,t,c)=>{if(!(p>0))return;const y=Y(p);ctx.strokeStyle=c;ctx.fillStyle=c;ctx.beginPath();ctx.moveTo(M.l,y);ctx.lineTo(W-M.r,y);ctx.stroke();ctx.fillText(t+' $'+fmt(p),W-M.r-4,y-2)};
+  T(K,'Strike','#d97706');if(P>0)T(K-net,'Breakeven','#16a34a');if(K2>0)T(K2,'Short strike','#9333ea');
+  ctx.restore()}
+function spread(K,P,pe){const K2=+$('pk').value,Q=+$('pq').value;if(!(K2>0&&K2<K&&Q>0&&Q<P))return '';
+  const net=P-Q,w=K-K2,v=Math.min(Math.max(K-pe,0),w),pl=(v-net)*100;
+  return '<br><b>Put debit spread '+K+'/'+K2+'</b>: net debit $'+fmt(net)+', breakeven $'+fmt(K-net)+', max profit $'+fmt((w-net)*100)+', max loss $'+fmt(net*100)+'. If your line is right: <b class="'+(pl>=0?'up':'dn')+'">'+money(pl)+'</b> per contract.'}
+function grid(){const n=data.length-1,last=data[n].p,L=tgt(),g=$('grid');
+  if(!L){if(grid.h){grid.h='';g.innerHTML=''}return}
+  const o=ord(L),sl=(o.b.p-o.a.p)/((o.b.i-o.a.i)||1e-9),at=i=>o.a.p+sl*(i-o.a.i);
+  const ex=[21,35,49,63,91,126].map(d=>{const x=new Date(data[n].d.slice(0,10)+'T00:00:00Z');x.setUTCDate(x.getUTCDate()+d);while(x.getUTCDay()!=5)x.setUTCDate(x.getUTCDate()+1);return x.toISOString().slice(0,10)});
+  const base=Math.round(last/10)*10,ks=[];for(let k=base+20;k>=base-40;k-=10)ks.push(k);
+  let h='<div class="fine" style="margin:8px 0 4px">Strike / expiry grid: each cell is the most you could pay per share and still break even <i>if your line is right at expiry</i> (strike minus the line\u2019s price). Click a cell to load it above, then compare with your broker\u2019s real quote.</div><div style="overflow-x:auto"><table><tr><th>Strike</th>'+ex.map(e=>'<th>'+e.slice(5)+'<br><span class="fine">line $'+fmt(at(idxOf(e)))+'</span></th>').join('')+'</tr>';
+  for(const k of ks){h+='<tr><th>'+k+'</th>';for(const e of ex){const v=k-at(idxOf(e));h+='<td data-k="'+k+'" data-e="'+e+'" class="'+(v>0?'up':'dn')+'">'+(v>0?'$'+fmt(v):'\u2014')+'</td>'}h+='</tr>'}
+  h+='</table></div>';if(grid.h!==h){grid.h=h;g.innerHTML=h}}
+$('grid').onclick=e=>{const c=e.target.closest('td[data-k]');if(c){$('ps').value=c.dataset.k;$('pe').value=c.dataset.e}};
+function maLine(){const k=Math.floor(+$('ma').value);if(!(k>=2)||k>data.length)return;
+  const cs=[0];for(const d of data)cs.push(cs[cs.length-1]+d.p);
+  const a=Math.max(k-1,Math.ceil(v0)-1),z=Math.min(data.length-1,Math.floor(v1)+1);
+  ctx.save();ctx.strokeStyle='#0d9488';ctx.fillStyle='#0d9488';ctx.lineWidth=1.6;ctx.setLineDash([]);ctx.beginPath();
+  let st=false,lx=0,ly=0,lm=0;
+  for(let i=a;i<=z;i++){const m=(cs[i+1]-cs[i+1-k])/k,x=X(i),y=Y(m);if(st)ctx.lineTo(x,y);else{ctx.moveTo(x,y);st=true}lx=x;ly=y;lm=m}
+  ctx.stroke();
+  if(st){ctx.font='10px system-ui,sans-serif';ctx.textAlign='right';ctx.textBaseline='top';ctx.fillText(k+(INTRA?'-bar':'-day')+' MA $'+fmt(lm),Math.min(lx,W-M.r-4),ly+6)}
+  ctx.restore()}
+$('ma').addEventListener('input',draw);
+
+const clampI=i=>Math.max(0,Math.min(data.length-1,Math.round(i)));
+function fitBox(){if(!fs&&ff==null)return;
+  ctx.save();ctx.fillStyle=css('--line');ctx.strokeStyle=css('--line');
+  if(fs){ctx.globalAlpha=.12;const x0=X(Math.min(fs.a,fs.b)),x1=X(Math.max(fs.a,fs.b));ctx.fillRect(x0,M.t,x1-x0,H-M.t-M.b)}
+  else{ctx.globalAlpha=.7;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(X(ff),M.t);ctx.lineTo(X(ff),H-M.b);ctx.stroke()}
+  ctx.restore()}
+function doFit(i0,i1){if(i0>i1){const t=i0;i0=i1;i1=t}if(i1-i0<1)return;
+  const n=i1-i0+1;let sx=0,sy=0,sxx=0,sxy=0;
+  for(let i=i0;i<=i1;i++){const y=data[i].p;sx+=i;sy+=y;sxx+=i*i;sxy+=i*y}
+  const b=(n*sxy-sx*sy)/(n*sxx-sx*sx),a=(sy-b*sx)/n,my=sy/n;let sst=0,ssr=0;
+  for(let i=i0;i<=i1;i++){const y=data[i].p;sst+=(y-my)*(y-my);ssr+=(y-a-b*i)*(y-a-b*i)}
+  const r2=sst?1-ssr/sst:1;
+  lines.push({a:{i:i0,p:a+b*i0},b:{i:i1,p:a+b*i1},f:true});sel=lines.length-1;
+  $('fitinfo').textContent='Best fit '+data[i0].d+' → '+data[i1].d+' ('+n+(INTRA?' bars':' trading days')+'): '+(b>=0?'+':'−')+'$'+fmt(Math.abs(b))+(INTRA?'/bar (':'/day (')+(b/my*100).toFixed(2)+(INTRA?'%/bar':'%/day')+'), R² '+r2.toFixed(2)}
+$('mFit').onclick=()=>{setMode('fit');$('mFit').classList.add('on');cv.classList.add('draw')};
+['mHover','mDraw'].forEach(id=>$(id).addEventListener('click',()=>{$('mFit').classList.remove('on');ff=null;draw()}));
+cv.addEventListener('pointerdown',e=>{if(mode!='fit')return;const{x}=pos(e);if(x<M.l||x>W-M.r)return;pn=null;cv.style.cursor='';const i=IX(x);fs={a:i,b:i,x}});
+cv.addEventListener('pointermove',e=>{if(!fs)return;const{x}=pos(e);fs.b=IX(Math.max(M.l,Math.min(W-M.r,x)));tip.style.display='none';draw()});
+cv.addEventListener('pointerup',e=>{if(!fs)return;const{x}=pos(e),s=fs;fs=null;
+  if(Math.abs(x-s.x)>6){ff=null;doFit(clampI(s.a),clampI(s.b))}
+  else{const i=clampI(s.a);if(ff==null)ff=i;else{doFit(ff,i);ff=null}}
+  draw()});
+addEventListener('keydown',e=>{if(e.key=='Escape'){ff=null;fs=null;draw()}});
+// When hosted next to a qqq.csv (e.g. on GitHub Pages), load it so prices stay current; otherwise keep the embedded data.
+fetch('qqq.csv',{cache:'no-store'}).then(r=>r.ok?r.text():Promise.reject()).then(t=>{const rows=parseCSV(t);setData(rows,false);$('note').textContent+=' (auto-updated from qqq.csv)'}).catch(()=>{});
+// ---- Intraday support: interval selector, date range filter, bar-aware dates ----
+function parseCSV(t){const L=t.trim().split(/\r?\n/);if(L.length<3)throw 0;
+  const h=L[0].split(',').map(s=>s.trim().replace(/"/g,'').toLowerCase());
+  const di=Math.max(h.indexOf('date'),h.indexOf('datetime'),h.indexOf('timestamp'));let ci=h.indexOf('close');if(ci<0)ci=h.indexOf('adj close');
+  if(di<0||ci<0)throw 0;const rows=[];
+  for(let i=1;i<L.length;i++){const c=L[i].split(',').map(s=>s.trim().replace(/"/g,''));const p=parseFloat(c[ci]);if(!isFinite(p))continue;
+    let d=c[di];
+    if(/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d/.test(d))d=d.slice(0,10)+' '+d.slice(11,16);
+    else if(/^\d{4}-\d\d-\d\d/.test(d))d=d.slice(0,10);
+    else{const x=new Date(d);if(isNaN(x))continue;d=x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')}
+    rows.push({d,p})}
+  if(rows.length<2)throw 0;return rows.sort((a,b)=>a.d<b.d?-1:1)}
+function setData(rows,demoFlag){all=rows;
+  const f=$('rf').value,t=$('rt').value;
+  let sub=rows.filter(r=>(!f||r.d.slice(0,10)>=f)&&(!t||r.d.slice(0,10)<=t));if(sub.length<2)sub=rows;
+  data=sub;lines=[];sel=-1;INTRA=sub[0].d.length>10;
+  if(INTRA){STEP=60;const m=s=>+s.slice(11,13)*60+ +s.slice(14,16);
+    for(let i=1;i<sub.length;i++){if(sub[i].d.slice(0,10)==sub[i-1].d.slice(0,10)){STEP=Math.max(1,m(sub[i].d)-m(sub[i-1].d));break}}
+    BPD=Math.max(1,Math.round(390/STEP))}
+  $('rf').min=$('rt').min=rows[0].d.slice(0,10);$('rf').max=$('rt').max=rows[rows.length-1].d.slice(0,10);
+  $('note').textContent='Loaded '+sub.length+(INTRA?' '+STEP+'-minute bars: ':' daily closes: ')+sub[0].d+' to '+sub[sub.length-1].d;
+  setRange(rangeN)}
+function setRange(k){rangeN=k;const n=data.length-1,days={'1D':0,'5D':6,'1M':30,'3M':91,'6M':182,'1Y':365,'5Y':1826,'MAX':1e5}[k];
+  const ld=new Date(data[n].d.slice(0,10)+'T00:00:00Z');ld.setUTCDate(ld.getUTCDate()-days);const cut=ld.toISOString().slice(0,10);
+  let a=0;while(a<n-1&&data[a].d.slice(0,10)<cut)a++;
+  v0=a;v1=n+Math.round((n-a+1)*.3);manY=false;
+  document.querySelectorAll('#rng button').forEach(b=>b.classList.toggle('on',b.textContent==k));draw()}
+function nextBar(s){
+  if(!INTRA){const d=new Date(s+'T00:00:00Z');do{d.setUTCDate(d.getUTCDate()+1)}while(d.getUTCDay()%6==0);return d.toISOString().slice(0,10)}
+  let m=+s.slice(11,13)*60+ +s.slice(14,16)+STEP;const d=new Date(s.slice(0,10)+'T00:00:00Z');
+  if(m>=960){do{d.setUTCDate(d.getUTCDate()+1)}while(d.getUTCDay()%6==0);m=570}
+  return d.toISOString().slice(0,10)+' '+String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')}
+function dateAt(i){i=Math.max(0,Math.round(i));const n=data.length-1;if(i<=n)return data[i].d;
+  const key=data[n].d+'|'+STEP+'|'+INTRA;if(fcache.src!==key){fcache.length=0;fcache.src=key;fcache.t=data[n].d}
+  while(fcache.length<i-n){fcache.t=nextBar(fcache.t);fcache.push(fcache.t)}
+  return fcache[i-n-1]}
+function idxOf(ds){const n=data.length-1,k=ds+'|'+n+'|'+STEP+'|'+INTRA+'|'+data[n].d;if(k in ixc)return ixc[k];
+  let i=n;
+  if(ds<data[n].d.slice(0,10)){while(i>0&&data[i].d.slice(0,10)>ds)i--}
+  else{let c=0;while(c++<2e5&&dateAt(i+1).slice(0,10)<=ds)i++}
+  return ixc[k]=i}
+function clampV(){const n=data.length-1,F=INTRA?BPD*60:800;let sp=Math.max(15,Math.min(v1-v0,n+F));if(v0<0)v0=0;v1=v0+sp;if(v1>n+F){v1=n+F;v0=v1-sp}}
+const DAILY0=data.slice();
+const FILES={'1d':'qqq.csv','1h':'qqq_1h.csv','5m':'qqq_5m.csv','1m':'qqq_1m.csv'};
+function loadIv(v){iv=v;rangeN={'1d':'1Y','1h':'1M','5m':'5D','1m':'1D'}[v];$('note').textContent='Loading '+FILES[v]+' ...';
+  fetch(FILES[v],{cache:'no-store'}).then(r=>r.ok?r.text():Promise.reject()).then(t=>{setData(parseCSV(t),false);$('note').textContent+=' (from '+FILES[v]+')'})
+  .catch(()=>{const was=v;iv='1d';$('iv').value='1d';rangeN='1Y';setData(DAILY0,false);
+    if(was!='1d')alert('Could not load '+FILES[was]+'. Intraday files are created by the update workflow and are only available on the GitHub-hosted version, after it has run at least once. Showing daily data instead.')})}
+$('iv').onchange=e=>loadIv(e.target.value);
+['rf','rt'].forEach(id=>$(id).onchange=()=>setData(all,false));
+['5D','1D'].forEach(k=>{const b=document.createElement('button');b.textContent=k;b.onclick=()=>setRange(k);$('rng').prepend(b)});
+let mv=null;
+cv.addEventListener('pointerdown',e=>{
+  pdl=tl?tl.li:-1;
+  if(mode=='hover'&&!e.shiftKey&&tl&&tl.li>=0&&lines[tl.li]){
+    const s=lines[tl.li],{x,y}=pos(e);pn=null;sel=tl.li;
+    mv={li:tl.li,x,y,a:{...s.a},b:{...s.b}};cv.style.cursor='move';draw();
+  }
+});
+cv.addEventListener('pointermove',e=>{
+  const{x,y}=pos(e);
+  if(mv){const s=lines[mv.li],di=IX(x)-IX(mv.x),dp=IY(y)-IY(mv.y);
+    s.a={i:mv.a.i+di,p:mv.a.p+dp};s.b={i:mv.b.i+di,p:mv.b.p+dp};
+    tl=null;hov=null;draw();tip.style.display='none';return}
+  if(!pn&&!drag)cv.style.cursor=(mode=='hover'&&tl)?'move':'';
+});
+cv.addEventListener('pointerup',()=>{mv=null});
+$('mir').onclick=()=>{
+  const k=sel>=0&&lines[sel]?sel:lines.length-1;if(k<0)return;
+  const s=ord(lines[k]),a=s.a,b=s.b;
+  lines.push({a:{i:a.i,p:a.p},b:{i:b.i,p:2*a.p-b.p},m:true});sel=lines.length-1;draw();
+};
+</script></body></html>

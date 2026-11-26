@@ -1,0 +1,34 @@
+name: Update QQQ prices
+
+on:
+  schedule:
+    # The US market closes at 4pm Eastern, which is 20:00 UTC in summer (EDT) and 21:00 UTC in winter (EST).
+    # Both times are scheduled; update_qqq.py ignores any run that happens before the close.
+    - cron: "10 20 * * 1-5"
+    - cron: "40 20 * * 1-5"
+    - cron: "10 21 * * 1-5"
+    - cron: "40 21 * * 1-5"
+  workflow_dispatch:          # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-qqq
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install yfinance
+      - run: python update_qqq.py
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add qqq*.csv
+          git diff --cached --quiet || (git commit -m "Update QQQ closes" && git push)
