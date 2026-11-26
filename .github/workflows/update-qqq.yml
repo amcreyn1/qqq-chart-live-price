@@ -22,5 +22,5 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
-          git add qqq.csv
+          git add qqq*.csv
           git diff --cached --quiet || (git commit -m "Update QQQ closes" && git push)
